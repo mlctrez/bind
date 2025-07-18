@@ -101,9 +101,15 @@ func (b *binder) bindField(field reflect.StructField, fieldValue reflect.Value) 
 			fieldValue.Set(dep.valueOf)
 			break
 		}
-		// Match pointer to value (inject pointer into value field)
+		// Match a pointer to value (inject a pointer into the value field)
 		if dep.typeOf.Kind() == reflect.Ptr && dep.typeOf.Elem() == field.Type {
 			fieldValue.Set(dep.valueOf.Elem())
+			break
+		}
+		// Match interface to implementing type
+		// If field is an interface type and the dependency implements it
+		if field.Type.Kind() == reflect.Interface && dep.typeOf.Implements(field.Type) {
+			fieldValue.Set(dep.valueOf)
 			break
 		}
 	}
