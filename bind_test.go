@@ -9,11 +9,6 @@ import (
 	"testing"
 )
 
-// Common test setup helper
-func setupBinder() Binder {
-	return New()
-}
-
 // Helper to create a logger for testing
 func createTestLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -27,17 +22,19 @@ func bufferLog(t *testing.T, b Binder) *bytes.Buffer {
 }
 
 func Test_setupLogger(t *testing.T) {
-	b := setupBinder()
-	defaultLogger := b.(*binder).Logger
-	assert.NotNil(t, defaultLogger.Handler())
-	dl := &defaultLogger
+	// assert that a new binder receives a default logger
+	assert.NotNil(t, New().(*binder).Logger)
+
+	// assert that adding a logger to the binder replaces the default logger
+	b := New()
 	nl := createTestLogger()
 	assert.NoError(t, b.Add(nl))
-	assert.True(t, &dl != &nl)
+	al := b.(*binder).Logger
+	assert.Equal(t, nl, &al)
 }
 
 func Test_Add(t *testing.T) {
-	b := setupBinder()
+	b := New()
 
 	// Test empty items slice
 	assert.NoError(t, b.Add())
@@ -52,15 +49,15 @@ func Test_Add(t *testing.T) {
 }
 
 func Test_Shutdown(t *testing.T) {
-	b := setupBinder()
+	b := New()
 	buffer := bufferLog(t, b)
 
-	// Test successful shutdown
+	// Test successful shutdown, no error logging should occur
 	good := &LifecycleTest{}
 	assert.NoError(t, b.Add(good))
 	b.Shutdown()
 
-	// Test error during shutdown
+	// Test for error logged during shutdown
 	bad := &LifecycleTest{}
 	assert.NoError(t, b.Add(bad))
 	bad.Err = fmt.Errorf("shutdown error")
@@ -69,7 +66,7 @@ func Test_Shutdown(t *testing.T) {
 }
 
 func Test_bindField(t *testing.T) {
-	b := setupBinder()
+	b := New()
 	logger := createTestLogger()
 	assert.NoError(t, b.Add(logger))
 
@@ -83,19 +80,18 @@ func Test_bindField(t *testing.T) {
 	t.Run("PublicField", func(t *testing.T) {
 		publicLog := &PublicLog{}
 		assert.NoError(t, b.Add(publicLog))
-		assert.NotNil(t, publicLog.Log, "Public fields should be bound")
-		assert.Equal(t, logger, publicLog.Log)
+		assert.Equal(t, logger, publicLog.Log, "public field should be set to logger")
 	})
 
 	t.Run("EmbeddedField", func(t *testing.T) {
 		inlineLog := &InlineLog{}
 		assert.NoError(t, b.Add(inlineLog))
-		assert.NotNil(t, inlineLog.Logger.Handler(), "Embedded fields should be bound")
+		assert.Equal(t, logger, &inlineLog.Logger, "embedded field should be set to logger")
 	})
 }
 
 func Test_bindField_EdgeCases(t *testing.T) {
-	b := setupBinder()
+	b := New()
 
 	t.Run("NoMatchingDependencies", func(t *testing.T) {
 		noDeps := &NoDependencies{}
@@ -109,8 +105,8 @@ func Test_bindField_EdgeCases(t *testing.T) {
 		consumer := &ServiceConsumer{}
 
 		assert.NoError(t, b.Add(service1))
-		assert.NoError(t, b.Add(consumer))
 		assert.NoError(t, b.Add(service2))
+		assert.NoError(t, b.Add(consumer))
 
 		assert.NotNil(t, consumer.Service, "Service should be bound")
 		assert.Equal(t, "service1", consumer.Service.Name, "First matching service should be bound")
@@ -125,7 +121,7 @@ func Test_bindField_EdgeCases(t *testing.T) {
 // Interface binding tests
 func Test_InterfaceBindings(t *testing.T) {
 	t.Run("SingleInterface", func(t *testing.T) {
-		b := setupBinder()
+		b := New()
 		repo := &UserRepository{Users: map[string]string{"1": "Alice", "2": "Bob"}}
 		service := &UserInterfaceService{}
 
@@ -138,7 +134,7 @@ func Test_InterfaceBindings(t *testing.T) {
 	})
 
 	t.Run("MultipleInterfaces", func(t *testing.T) {
-		b := setupBinder()
+		b := New()
 		userRepo := &UserRepository{Users: map[string]string{"1": "Alice"}}
 		productRepo := &ProductRepository{Products: map[string]string{"A": "Laptop"}}
 		compositeService := &CompositeService{}
@@ -158,7 +154,7 @@ func Test_InterfaceBindings(t *testing.T) {
 	})
 
 	t.Run("SameInterfaceDifferentFields", func(t *testing.T) {
-		b := setupBinder()
+		b := New()
 		memCache := &MemoryCache{Data: map[string][]byte{"key1": []byte("value1")}}
 		diskCache := &DiskCache{FilePath: "/tmp/cache"}
 		cacheService := &CacheService{}
@@ -176,7 +172,7 @@ func Test_InterfaceBindings(t *testing.T) {
 	})
 
 	t.Run("PointerImplementingInterface", func(t *testing.T) {
-		b := setupBinder()
+		b := New()
 		formatter := &CustomFormatter{Prefix: "TEST: "}
 		service := &FormatterService{}
 
